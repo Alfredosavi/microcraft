@@ -1,0 +1,27 @@
+# Arquivos de objeto
+*.o
+*.obj
+
+# Arquivos de dependência gerados
+*.d
+
+# Executáveis
+*.out
+*.exe
+*.elf
+*.bin
+
+# Diretórios de build em qualquer lugar
+**/build/
+**/bin/
+**/Debug/
+**/Release/
+
+# Arquivos temporários do editor
+*~
+*.swp
+*.swo
+
+# Logs e relatórios
+*.log
+*.lst
