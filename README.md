@@ -79,7 +79,7 @@ Como o MSP430G2553 **não possui Ethernet**, a comunicação de rede é feita us
 - Modulo W5500 (Ethernet via SPI)  
 - Fonte externa 3.3V (para o W5500)  
 
-<!-- ![Hardware](.github/docs/images/hardware.jpg) -->
+![Hardware](.github/docs/images/hardware.png)
 
 ### Interface MSP430 ↔ W5500
 
@@ -235,6 +235,10 @@ Substitua pelo IP e pela porta configurados em `app_config.h`. O computador e o 
 
 ---
 
-## 🔗 Links Úteis
-<!-- TODO -->
-<!-- A implementação da API do Minecraft (versão **340**, protocolo **1.12.2**) foi baseada na documentação disponível em https://XXXXXX. -->
+## 📦 Teste rápido com binário pré-compilado
+
+Para quem deseja apenas testar o projeto, sem precisar instalar o Code Composer Studio (CCS), clonar o repositório ou compilar o código-fonte, o binário pré-compilado está disponível na seção `Releases` do GitHub.
+
+Para gravar o firmware no microcontrolador, siga as instruções de gravação disponíveis no tópico **Build e Execução (Versão MCU)** na parte de **Gravação e execução**.
+
+> **Importante:** para que a comunicação funcione corretamente, é necessário respeitar as configurações de rede utilizadas pelo firmware, como endereço IP, máscara de sub-rede e porta TCP. Esses parâmetros estão documentados na seção **Configuração de Rede**, dentro do tópico **Build e Execução (Versão MCU)**.
