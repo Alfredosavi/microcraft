@@ -25,3 +25,8 @@
 # Logs e relatórios
 *.log
 *.lst
+
+# IDEs e arquivos de configuração do ambiente
+.vscode/
+.idea/
+.settings/

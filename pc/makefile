@@ -1,10 +1,15 @@
-CC      := gcc
-CFLAGS  := -Wall -Wextra -Wpedantic -O2
-LDFLAGS :=
+CC       ?= gcc
 
-TARGET  := server
-SRC     := $(wildcard *.c)
-OBJ     := $(patsubst %.c, build/%.o, $(SRC))
+CFLAGS   ?= -O2
+CFLAGS   += -Wall -Wextra -Wpedantic
+
+CPPFLAGS ?=
+LDFLAGS  ?=
+LDLIBS   ?=
+
+TARGET   := server
+SRC      := $(wildcard *.c)
+OBJ      := $(patsubst %.c, build/%.o, $(SRC))
 
 all: build $(TARGET)
 
@@ -12,12 +17,15 @@ build:
 	mkdir -p build
 
 $(TARGET): $(OBJ)
-	$(CC) $(OBJ) -o build/$@ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o build/$@ $^ $(LDFLAGS) $(LDLIBS)
+
+run: all
+	./build/$(TARGET)
 
 build/%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 clean:
 	rm -rf build
 
-.PHONY: all clean build
+.PHONY: all clean build run
