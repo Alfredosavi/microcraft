@@ -12,19 +12,33 @@ static const char status_json[] = MC_STATUS_JSON;
 static const uint8_t login_identity[] = "\x02\x24" "00000000-0000-0000-0000-000000000000";
 static const uint8_t pong_header[] = {9, 1};
 
- /* Join Game and Position And Look, including lengths, in big-endian.
-  * Entity 1, survival, overworld, easy, default; position (0, 70, 0).
+  /* Join Game and Position And Look, including lengths, in big-endian.
+   * Entity 1, survival, overworld, easy, default; position (8.5, 70, 8.5).
   * Y=70 in IEEE754: 0x4051800000000000; flags=0 and teleport ID=1. */
 static const uint8_t play_start[] = {
     21, 0x23, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1,
     7, 'd', 'e', 'f', 'a', 'u', 'l', 't', 0,
-    35, 0x2f,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0x40, 0x51, 0x80, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 1
 };
+
+static const uint8_t spawn_position[] = {
+    35, 0x2f,
+    0x40, 0x21, 0, 0, 0, 0, 0, 0,
+    0x40, 0x51, 0x80, 0, 0, 0, 0, 0,
+    0x40, 0x21, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, MC_INITIAL_TELEPORT_ID
+};
+
+// Repeated chunk data lives in Flash, because RAM is limited xdx
+#define REPEAT8(x) x, x, x, x, x, x, x, x
+#define REPEAT64(x) REPEAT8(x), REPEAT8(x), REPEAT8(x), REPEAT8(x), \
+                    REPEAT8(x), REPEAT8(x), REPEAT8(x), REPEAT8(x)
+static const uint8_t chunk_zero[128] = {0};
+static const uint8_t chunk_stone[128] = {REPEAT64(0x11), REPEAT64(0x11)};
+static const uint8_t chunk_sky[128] = {REPEAT64(0xff), REPEAT64(0xff)};
+static const uint8_t chunk_biomes[128] = {REPEAT64(1), REPEAT64(1)};
+#undef REPEAT64
+#undef REPEAT8
 
 
 static int16_t send_all(const uint8_t *data, uint16_t len)
@@ -109,6 +123,65 @@ int16_t mc_send_keepalive(uint16_t id)
 }
 
 
+static int16_t send_chunk_runs(const uint8_t *data, uint8_t count)
+{
+    while (count--) {
+        int16_t rc = send_all(data, 128);
+        if (rc < 0) return rc;
+    }
+    
+    return W5500_OK;
+}
+
+
+static int16_t send_spawn_chunk(void)
+{
+    /* Chunk (0,0), ground-up, section Y=4 only (world Y=64..79).
+     * Palette: air=0, stone=1<<4. 4096 blocks at 4 bits = 256 longs.
+     * Data: 6-byte section header + 2048 blocks + 4096 light + 256 biomes. */
+    static const uint8_t header[] = {
+        0x20, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0x10
+    };
+
+    static const uint8_t section[] = {4, 2, 0, 16, 0x80, 2};
+    const uint16_t data_size = 6406u;
+
+    int16_t rc = send_varint(sizeof(header) + varint_size(data_size) + data_size + 1u);
+    if (rc < 0) return rc;
+
+    rc = send_all(header, sizeof(header));
+    if (rc < 0) return rc;
+
+    rc = send_varint(data_size);
+    if (rc < 0) return rc;
+
+    rc = send_all(section, sizeof(section));
+    if (rc < 0) return rc;
+
+    /* Y-major block order: five air layers, stone at Y=69, ten air layers. */
+    rc = send_chunk_runs(chunk_zero, 5);
+    if (rc < 0) return rc;
+
+    rc = send_chunk_runs(chunk_stone, 1);
+    if (rc < 0) return rc;
+
+    rc = send_chunk_runs(chunk_zero, 10);
+    if (rc < 0) return rc;
+
+    rc = send_chunk_runs(chunk_zero, 16); /* Block light. */
+    if (rc < 0) return rc;
+
+    rc = send_chunk_runs(chunk_zero, 6); /* Sky light below/inside the platform. */
+    if (rc < 0) return rc;
+
+    rc = send_chunk_runs(chunk_sky, 10); /* Full sky light above the platform. */
+    if (rc < 0) return rc;
+
+    rc = send_chunk_runs(chunk_biomes, 2); /* Plains. */
+    return rc < 0 ? rc : send_varint(0); /* No block entities. */
+}
+
+
 int16_t mc_send_login(const uint8_t *name, uint8_t length)
 {
     int16_t rc = send_varint(1u + 1u + 36u + 1u + length);
@@ -123,5 +196,11 @@ int16_t mc_send_login(const uint8_t *name, uint8_t length)
     rc = send_all(name, length);
     if (rc < 0) return rc;
     
-    return send_all(play_start, sizeof(play_start));
+    rc = send_all(play_start, sizeof(play_start));
+    if (rc < 0) return rc;
+
+    rc = send_spawn_chunk();
+    if (rc < 0) return rc;
+
+    return send_all(spawn_position, sizeof(spawn_position));
 }

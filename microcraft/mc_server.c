@@ -13,7 +13,7 @@ enum {
     LENGTH, ID, PROTOCOL, ADDRESS_LENGTH, ADDRESS, NEXT_STATE,
     NAME_LENGTH, NAME, PING, SKIP,
     HANDSHAKE_END, STATUS_END, PING_END, LOGIN_END,
-    KEEPALIVE, KEEPALIVE_END
+    KEEPALIVE, KEEPALIVE_END, TELEPORT_ID, TELEPORT_END
 };
 
 
@@ -33,6 +33,7 @@ static struct {
     uint16_t keepalive_at;
     uint16_t keepalive_id;
     bool keepalive_pending;
+    bool teleport_pending;
 } session;
 
 
@@ -93,7 +94,10 @@ static int16_t start_packet(uint32_t id)
         break;
 
         case PLAY:
-            if (id == 0x0b) {
+            if (id == 0x00) {
+                if (!session.teleport_pending) return MC_ERR_PACKET;
+                session.field = TELEPORT_ID;
+            } else if (id == 0x0b) {
                 if (session.remaining != 8 || !session.keepalive_pending)
                     return MC_ERR_PACKET;
                 session.field = KEEPALIVE;
@@ -128,7 +132,12 @@ static int16_t finish_packet(void)
             if (rc == W5500_OK) {
                 session.state = PLAY;
                 session.keepalive_at = clock_ticks();
+                session.teleport_pending = true;
             }
+        break;
+
+        case TELEPORT_END:
+            session.teleport_pending = false;
         break;
 
         case KEEPALIVE_END:
@@ -187,6 +196,7 @@ static int16_t consume_field(uint8_t byte)
         case PING_END:
         case LOGIN_END:
         case KEEPALIVE_END:
+        case TELEPORT_END:
             return MC_ERR_PACKET;
 
         default:
@@ -219,6 +229,12 @@ static int16_t consume_field(uint8_t byte)
 
             session.state = value == 1 ? STATUS : LOGIN;
             session.field = HANDSHAKE_END;
+        break;
+
+        case TELEPORT_ID:
+            if (value != MC_INITIAL_TELEPORT_ID || session.remaining != 0)
+                return MC_ERR_PACKET;
+            session.field = TELEPORT_END;
         break;
 
         case NAME_LENGTH:

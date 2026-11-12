@@ -2,6 +2,7 @@
 #define MC_CONFIG_H
 
 #define MC_PROTOCOL_VERSION 340u
+#define MC_INITIAL_TELEPORT_ID 1u /* Single-byte VarInt in spawn_position (0..127). */
 #define MC_STATUS_JSON \
     "{\"version\":{\"name\":\"1.12.2\",\"protocol\":340}," \
     "\"players\":{\"max\":1,\"online\":0}," \
