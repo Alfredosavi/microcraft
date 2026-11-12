@@ -35,6 +35,10 @@ static const uint8_t spawn_position[] = {
                     REPEAT8(x), REPEAT8(x), REPEAT8(x), REPEAT8(x)
 static const uint8_t chunk_zero[128] = {0};
 static const uint8_t chunk_stone[128] = {REPEAT64(0x11), REPEAT64(0x11)};
+/* Layer Y=70: lever at (8,70,10), unlit lamp at (9,70,10).
+ * Each row is one big-endian long; X=8/9 occupy its fourth byte.
+ * Palette indices 2 (low nibble) and 3 (high nibble). */
+static const uint8_t chunk_devices[128] = {[10u * 8u + 3u] = 0x32};
 static const uint8_t chunk_sky[128] = {REPEAT64(0xff), REPEAT64(0xff)};
 static const uint8_t chunk_biomes[128] = {REPEAT64(1), REPEAT64(1)};
 #undef REPEAT64
@@ -137,14 +141,16 @@ static int16_t send_chunk_runs(const uint8_t *data, uint8_t count)
 static int16_t send_spawn_chunk(void)
 {
     /* Chunk (0,0), ground-up, section Y=4 only (world Y=64..79).
-     * Palette: air=0, stone=1<<4. 4096 blocks at 4 bits = 256 longs.
-     * Data: 6-byte section header + 2048 blocks + 4096 light + 256 biomes. */
+     * Palette: air, stone, floor-mounted lever (off), redstone lamp (off).
+     * 4096 blocks at 4 bits = 256 longs.
+     * Data: 10-byte section header + 2048 blocks + 4096 light + 256 biomes. */
     static const uint8_t header[] = {
         0x20, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0x10
     };
 
-    static const uint8_t section[] = {4, 2, 0, 16, 0x80, 2};
-    const uint16_t data_size = 6406u;
+    /* Legacy states: lever=(69<<4)|5=1109, unlit lamp=123<<4=1968. */
+    static const uint8_t section[] = {4, 4, 0, 16, 0xd5, 0x08, 0xb0, 0x0f, 0x80, 2};
+    const uint16_t data_size = 6410u;
 
     int16_t rc = send_varint(sizeof(header) + varint_size(data_size) + data_size + 1u);
     if (rc < 0) return rc;
@@ -158,14 +164,17 @@ static int16_t send_spawn_chunk(void)
     rc = send_all(section, sizeof(section));
     if (rc < 0) return rc;
 
-    /* Y-major block order: five air layers, stone at Y=69, ten air layers. */
+    /* Y-major order: five air layers, stone, devices, nine air layers. */
     rc = send_chunk_runs(chunk_zero, 5);
     if (rc < 0) return rc;
 
     rc = send_chunk_runs(chunk_stone, 1);
     if (rc < 0) return rc;
 
-    rc = send_chunk_runs(chunk_zero, 10);
+    rc = send_chunk_runs(chunk_devices, 1);
+    if (rc < 0) return rc;
+
+    rc = send_chunk_runs(chunk_zero, 9);
     if (rc < 0) return rc;
 
     rc = send_chunk_runs(chunk_zero, 16); /* Block light. */
