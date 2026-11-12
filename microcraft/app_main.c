@@ -27,8 +27,7 @@ int16_t app_main_poll(void);
 // MAIN APP
 void app_main_run(void)
 {
-    // INIT
-    // ...
+    clock_init();
     
     // MAIN LOOP
     while (true) {
@@ -61,8 +60,9 @@ static int16_t app_error(int16_t error)
     closing_ms = 0;
     if (rc < 0) return rc;
     
-    // Invalid packet or version error is not fatal; just close the connection and wait for a new one.
-    if (error == MC_ERR_PACKET || error == MC_ERR_VERSION) return W5500_OK;
+    // Protocol errors and Keep Alive timeouts only close the current connection.
+    if (error == MC_ERR_PACKET || error == MC_ERR_VERSION || error == MC_ERR_TIMEOUT)
+        return W5500_OK;
     return error;
 }
 

@@ -5,13 +5,15 @@
 
 #include "w5500.h"
 #include "bsp_led.h"
+#include "bsp_delay.h"
 #include <string.h>
 
 enum { HANDSHAKE, STATUS, LOGIN, PLAY };
 enum {
     LENGTH, ID, PROTOCOL, ADDRESS_LENGTH, ADDRESS, NEXT_STATE,
     NAME_LENGTH, NAME, PING, SKIP,
-    HANDSHAKE_END, STATUS_END, PING_END, LOGIN_END
+    HANDSHAKE_END, STATUS_END, PING_END, LOGIN_END,
+    KEEPALIVE, KEEPALIVE_END
 };
 
 
@@ -28,6 +30,9 @@ static struct {
     } detail;
 
     uint8_t payload[MC_USERNAME_BYTES];
+    uint16_t keepalive_at;
+    uint16_t keepalive_id;
+    bool keepalive_pending;
 } session;
 
 
@@ -87,8 +92,14 @@ static int16_t start_packet(uint32_t id)
             session.field = id == 0 ? NAME_LENGTH : SKIP;
         break;
 
-        default:
-            session.field = SKIP; // Packets after PLAY state are ignored, but the connection is not closed. This allows for future extensions of the protocol.
+        case PLAY:
+            if (id == 0x0b) {
+                if (session.remaining != 8 || !session.keepalive_pending)
+                    return MC_ERR_PACKET;
+                session.field = KEEPALIVE;
+            } else {
+                session.field = SKIP;
+            }
         break;
     }
 
@@ -114,7 +125,21 @@ static int16_t finish_packet(void)
 
         case LOGIN_END:
             rc = mc_send_login(session.payload, session.detail.used);
-            if (rc == W5500_OK) session.state = PLAY;
+            if (rc == W5500_OK) {
+                session.state = PLAY;
+                session.keepalive_at = clock_ticks();
+            }
+        break;
+
+        case KEEPALIVE_END:
+            /* The ID uses only the low 16 bits, but validate all eight bytes. */
+            if (session.payload[0] || session.payload[1] || session.payload[2] ||
+                session.payload[3] || session.payload[4] || session.payload[5] ||
+                session.payload[6] != (uint8_t)(session.keepalive_id >> 8) ||
+                session.payload[7] != (uint8_t)session.keepalive_id)
+                return MC_ERR_PACKET;
+            session.keepalive_pending = false;
+            session.keepalive_at = clock_ticks();
         break;
 
         case SKIP:
@@ -149,6 +174,11 @@ static int16_t consume_field(uint8_t byte)
             if (session.remaining == 0) session.field = PING_END;
         return W5500_OK;
 
+        case KEEPALIVE:
+            session.payload[session.detail.used++] = byte;
+            if (session.remaining == 0) session.field = KEEPALIVE_END;
+        return W5500_OK;
+
         case SKIP:
             return W5500_OK;
 
@@ -156,6 +186,7 @@ static int16_t consume_field(uint8_t byte)
         case STATUS_END:
         case PING_END:
         case LOGIN_END:
+        case KEEPALIVE_END:
             return MC_ERR_PACKET;
 
         default:
@@ -231,6 +262,30 @@ static int16_t consume_byte(uint8_t byte)
 }
 
 
+static int16_t poll_keepalive(void)
+{
+    uint16_t now;
+    uint16_t elapsed;
+    int16_t rc;
+
+    if (session.state != PLAY) return W5500_OK;
+
+    now = clock_ticks();
+    elapsed = (uint16_t)(now - session.keepalive_at); /* Handles tick wraparound. */
+    if (session.keepalive_pending)
+        return elapsed >= MC_KEEPALIVE_TIMEOUT_MS / BSP_CLOCK_TICK_MS
+            ? MC_ERR_TIMEOUT : W5500_OK;
+
+    if (elapsed < MC_KEEPALIVE_INTERVAL_MS / BSP_CLOCK_TICK_MS) return W5500_OK;
+
+    rc = mc_send_keepalive(++session.keepalive_id);
+    if (rc < 0) return rc;
+    session.keepalive_at = clock_ticks();
+    session.keepalive_pending = true;
+    return W5500_OK;
+}
+
+
 int16_t mc_server_poll(void)
 {
     uint16_t budget = MC_RX_BYTES_PER_POLL;
@@ -239,7 +294,8 @@ int16_t mc_server_poll(void)
         uint8_t byte;
 
         int16_t rc = w5500_tcp_recv(&byte, 1);
-        if (rc <= 0) return rc;
+        if (rc < 0) return rc;
+        if (rc == 0) break;
 
         led_toggle();
         rc = consume_byte(byte);
@@ -247,5 +303,5 @@ int16_t mc_server_poll(void)
         if (rc < 0) return rc;
     }
     
-    return W5500_OK;
+    return poll_keepalive();
 }

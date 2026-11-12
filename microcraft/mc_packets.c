@@ -99,6 +99,16 @@ int16_t mc_send_pong(const uint8_t payload[8])
 }
 
 
+int16_t mc_send_keepalive(uint16_t id)
+{
+    /* Protocol 340: packet 0x1f, followed by a big-endian 64-bit Long. */
+    uint8_t packet[10] = {9, 0x1F, 0, 0, 0, 0, 0, 0, 0, 0};
+    packet[8] = (uint8_t)(id >> 8);
+    packet[9] = (uint8_t)id;
+    return send_all(packet, sizeof(packet));
+}
+
+
 int16_t mc_send_login(const uint8_t *name, uint8_t length)
 {
     int16_t rc = send_varint(1u + 1u + 36u + 1u + length);

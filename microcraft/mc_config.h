@@ -10,6 +10,8 @@
 #define MC_MAX_PACKET_BYTES 2097151u
 #define MC_RX_BYTES_PER_POLL 64u
 #define MC_TX_WAIT_MS 1000u
+#define MC_KEEPALIVE_INTERVAL_MS 10000u
+#define MC_KEEPALIVE_TIMEOUT_MS 30000u
 #define MC_USERNAME_BYTES 16u   // Limit of the username in the Java 1.12.2 protocol.
 
 #endif

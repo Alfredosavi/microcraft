@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-enum { MC_ERR_PACKET = -10, MC_ERR_VERSION = -11 };
+enum { MC_ERR_PACKET = -10, MC_ERR_VERSION = -11, MC_ERR_TIMEOUT = -12 };
 
 
 
