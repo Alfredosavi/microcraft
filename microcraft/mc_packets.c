@@ -12,6 +12,10 @@ static const char status_json[] = MC_STATUS_JSON;
 static const uint8_t login_identity[] = "\x02\x24" "00000000-0000-0000-0000-000000000000";
 static const uint8_t pong_header[] = {9, 1};
 
+/* Protocol 340 Position: X:26, Y:12, Z:26 bits, big-endian. */
+const uint8_t mc_lever_position[8] = {0, 0, 2, 1, 0x18, 0, 0, 10}; /* (8,70,10) */
+static const uint8_t lamp_position[8] = {0, 0, 2, 0x41, 0x18, 0, 0, 10}; /* (9,70,10) */
+
   /* Join Game and Position And Look, including lengths, in big-endian.
    * Entity 1, survival, overworld, easy, default; position (8.5, 70, 8.5).
   * Y=70 in IEEE754: 0x4051800000000000; flags=0 and teleport ID=1. */
@@ -124,6 +128,25 @@ int16_t mc_send_keepalive(uint16_t id)
     packet[8] = (uint8_t)(id >> 8);
     packet[9] = (uint8_t)id;
     return send_all(packet, sizeof(packet));
+}
+
+
+static int16_t send_block_change(const uint8_t position[8], uint16_t state)
+{
+    /* Both device states occupy two VarInt bytes. */
+    static const uint8_t header[] = {11, 0x0b};
+    int16_t rc = send_all(header, sizeof(header));
+    if (rc < 0) return rc;
+    rc = send_all(position, 8);
+    return rc < 0 ? rc : send_varint(state);
+}
+
+
+int16_t mc_send_devices(bool powered)
+{
+    /* Lever metadata: floor orientation 5, powered bit 8. Lamp IDs: 123/124. */
+    int16_t rc = send_block_change(mc_lever_position, (69u << 4) | 5u | (powered ? 8u : 0u));
+    return rc < 0 ? rc : send_block_change(lamp_position, (powered ? 124u : 123u) << 4);
 }
 
 

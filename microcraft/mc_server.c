@@ -13,7 +13,8 @@ enum {
     LENGTH, ID, PROTOCOL, ADDRESS_LENGTH, ADDRESS, NEXT_STATE,
     NAME_LENGTH, NAME, PING, SKIP,
     HANDSHAKE_END, STATUS_END, PING_END, LOGIN_END,
-    KEEPALIVE, KEEPALIVE_END, TELEPORT_ID, TELEPORT_END
+    KEEPALIVE, KEEPALIVE_END, TELEPORT_ID, TELEPORT_END,
+    USE_POSITION, USE_FACE, USE_HAND, USE_CURSOR, USE_END
 };
 
 
@@ -34,6 +35,7 @@ static struct {
     uint16_t keepalive_id;
     bool keepalive_pending;
     bool teleport_pending;
+    bool devices_powered;
 } session;
 
 
@@ -41,6 +43,7 @@ static struct {
 void mc_server_reset(void)
 {
     memset(&session, 0, sizeof(session)); /* HANDSHAKE, LENGTH */
+    led_off(); // Devices off by default
 }
 
 
@@ -101,6 +104,9 @@ static int16_t start_packet(uint32_t id)
                 if (session.remaining != 8 || !session.keepalive_pending)
                     return MC_ERR_PACKET;
                 session.field = KEEPALIVE;
+            } else if (id == 0x1F) { // Player Block Placement (block interaction)
+                if (session.remaining < 22 || session.remaining > 30) return MC_ERR_PACKET;
+                session.field = USE_POSITION;
             } else {
                 session.field = SKIP;
             }
@@ -151,6 +157,20 @@ static int16_t finish_packet(void)
             session.keepalive_at = clock_ticks();
         break;
 
+        case USE_END:
+            // Main hand only: a click can also produce an off-hand packet.
+            if (!session.teleport_pending && session.payload[8] == 0 &&
+                memcmp(session.payload, mc_lever_position, 8) == 0) {
+                rc = mc_send_devices(!session.devices_powered);
+
+                if (rc == W5500_OK) {
+                    session.devices_powered = !session.devices_powered;
+                    if (session.devices_powered) led_on();
+                    else led_off();
+                }
+            }
+        break;
+
         case SKIP:
         break;
         
@@ -188,6 +208,16 @@ static int16_t consume_field(uint8_t byte)
             if (session.remaining == 0) session.field = KEEPALIVE_END;
         return W5500_OK;
 
+        case USE_POSITION:
+            session.payload[session.detail.used++] = byte;
+            if (session.detail.used == 8) session.field = USE_FACE;
+        return W5500_OK;
+
+        case USE_CURSOR:
+            // Three floats (cursor X/Y/Z); not needed for this fixed scene.
+            if (session.remaining == 0) session.field = USE_END;
+        return W5500_OK;
+
         case SKIP:
             return W5500_OK;
 
@@ -197,6 +227,7 @@ static int16_t consume_field(uint8_t byte)
         case LOGIN_END:
         case KEEPALIVE_END:
         case TELEPORT_END:
+        case USE_END:
             return MC_ERR_PACKET;
 
         default:
@@ -235,6 +266,17 @@ static int16_t consume_field(uint8_t byte)
             if (value != MC_INITIAL_TELEPORT_ID || session.remaining != 0)
                 return MC_ERR_PACKET;
             session.field = TELEPORT_END;
+        break;
+
+        case USE_FACE:
+            if (value > 5) return MC_ERR_PACKET;
+            session.field = USE_HAND;
+        break;
+
+        case USE_HAND:
+            if (value > 1 || session.remaining != 12) return MC_ERR_PACKET;
+            session.payload[8] = (uint8_t)value;
+            session.field = USE_CURSOR;
         break;
 
         case NAME_LENGTH:
@@ -313,7 +355,6 @@ int16_t mc_server_poll(void)
         if (rc < 0) return rc;
         if (rc == 0) break;
 
-        led_toggle();
         rc = consume_byte(byte);
 
         if (rc < 0) return rc;
