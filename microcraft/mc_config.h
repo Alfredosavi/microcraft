@@ -8,6 +8,10 @@
     "\"players\":{\"max\":1,\"online\":0}," \
     "\"description\":{\"text\":\"Minecraft Server | Powered by MSP430G2553\"}}"
 
+/* Chat messages sent when the lever changes the LED state. */
+#define MC_LED_ON_JSON  "{\"text\":\"[SERVER] LED on\"}"
+#define MC_LED_OFF_JSON "{\"text\":\"[SERVER] LED off\"}"
+
 #define MC_MAX_PACKET_BYTES 2097151u
 #define MC_RX_BYTES_PER_POLL 64u
 #define MC_TX_WAIT_MS 1000u

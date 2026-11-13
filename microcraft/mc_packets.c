@@ -150,6 +150,68 @@ int16_t mc_send_devices(bool powered)
 }
 
 
+static int16_t send_device_chat(bool powered)
+{
+    static const char on[] = MC_LED_ON_JSON;
+    static const char off[] = MC_LED_OFF_JSON;
+
+    const char *text = powered ? on : off;
+    uint16_t length = powered ? sizeof(on) - 1u : sizeof(off) - 1u;
+
+    int16_t rc = send_varint(1u + varint_size(length) + length + 1u);
+    if (rc < 0) return rc;
+
+    rc = send_varint(0x0f); // Chat Message, protocol 340.
+    if (rc < 0) return rc;
+
+    rc = send_varint(length);
+    if (rc < 0) return rc;
+
+    rc = send_all((const uint8_t *)text, length);
+    return rc < 0 ? rc : send_varint(1); // System message in the chat area.
+}
+
+
+static int16_t send_lever_sound(bool powered)
+{
+    static const char name[] = "block.lever.click";
+    /* Blocks category; center (8.5,70.5,10.5), coordinates multiplied by 8.
+     * Volume 0.3, pitch 0.6 when on and 0.5 when off (big-endian floats). */
+    static const uint8_t settings[] = {
+        4,
+        0, 0, 0, 68, 0, 0, 2, 52, 0, 0, 0, 84,
+        0x3e, 0x99, 0x99, 0x9a
+    };
+
+    static const uint8_t pitch_on[] = {0x3f, 0x19, 0x99, 0x9a};
+    static const uint8_t pitch_off[] = {0x3f, 0, 0, 0};
+
+    const uint16_t length = sizeof(name) - 1u;
+    
+    int16_t rc = send_varint(1u + varint_size(length) + length + sizeof(settings) + 4u);
+    if (rc < 0) return rc;
+    
+    rc = send_varint(0x19); /* Named Sound Effect, protocol 340. */
+    if (rc < 0) return rc;
+    
+    rc = send_varint(length);
+    if (rc < 0) return rc;
+    
+    rc = send_all((const uint8_t *)name, length);
+    if (rc < 0) return rc;
+    
+    rc = send_all(settings, sizeof(settings));
+    return rc < 0 ? rc : send_all(powered ? pitch_on : pitch_off, 4);
+}
+
+
+int16_t mc_send_device_feedback(bool powered)
+{
+    int16_t rc = send_device_chat(powered);
+    return rc < 0 ? rc : send_lever_sound(powered);
+}
+
+
 static int16_t send_chunk_runs(const uint8_t *data, uint8_t count)
 {
     while (count--) {

@@ -167,6 +167,7 @@ static int16_t finish_packet(void)
                     session.devices_powered = !session.devices_powered;
                     if (session.devices_powered) led_on();
                     else led_off();
+                    rc = mc_send_device_feedback(session.devices_powered);
                 }
             }
         break;
