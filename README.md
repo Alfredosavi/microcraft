@@ -34,6 +34,7 @@ Funcionalidades atuais da versão embarcada (`microcraft/`):
 - Clique com a mão principal alterna o estado; interações da mão secundária são ignoradas para evitar acionamento duplo.
 - Atualização visual dos dois blocos por pacotes `Block Change`.
 - **LED onboard sincronizado com a lâmpada**, sem piscar com o tráfego de rede.
+- **Botão onboard S2 (P1.3)** alterna a alavanca, a lâmpada e o LED, com o mesmo feedback de chat e som do clique no jogo.
 - Mensagens de estado no chat, personalizáveis em `mc_config.h`.
 - Som da alavanca na posição do bloco, com tons diferentes ao ligar e desligar.
 
@@ -123,6 +124,8 @@ Os nomes P1.x/P2.x identificam as portas do MCU.
 
 O LED usado na demonstração é o **vermelho onboard, em P1.0**. O pino **P1.6 fica reservado ao MISO do W5500**. Não é necessário adicionar um LED externo.
 
+O botão **S2, em P1.3**, é configurado como entrada com pull-up e fica em nível baixo quando pressionado. A leitura é feita por polling, com **debounce de 30 ms** para evitar múltiplos acionamentos por uma única pressão. Segurar o botão não repete a ação: é preciso soltar e pressionar novamente. Use S2, não o botão de reset.
+
 ### ⚠️ Observações Importantes
 
 - **O W5500 foi escolhido propositalmente** por implementar toda a stack TCP/IP em hardware, permitindo:
@@ -196,6 +199,8 @@ O parser processa os dados byte a byte, sem guardar pacotes inteiros em RAM. Nom
 
 No estado PLAY, o firmware trata a confirmação do teleporte, respostas de Keep Alive e interações com a alavanca. Um acionamento válido atualiza os blocos, o LED, a mensagem no chat e o som. Os demais pacotes sem implementação são descartados pelo parser.
 
+O botão S2 reutiliza essa mesma atualização de estado. Seu acionamento só é aplicado quando há cliente conectado no estado PLAY e o teleporte inicial já foi confirmado. Assim, o botão físico e a alavanca do jogo controlam o mesmo estado, mantendo lâmpada e LED sincronizados.
+
 O **Timer_A0 gera ticks de 10 ms**, mantendo a base de tempo do Keep Alive durante as esperas de rede. Ao resetar a sessão, o LED é apagado e o próximo jogador recebe o cenário inicialmente desligado.
 
 | Arquivos na raiz do projeto CCS | Responsabilidade |
@@ -207,6 +212,7 @@ O **Timer_A0 gera ticks de 10 ms**, mantendo a base de tempo do Keep Alive duran
 | `w5500_msp_config.h` | Pinos, tempos de reset e referência de clock para atrasos |
 | `bsp_spi`, `bsp_w5500`, `bsp_delay` (`.c/.h`) | Acesso ao hardware e temporização |
 | `bsp_led.c/.h` | Controle do LED onboard em P1.0 |
+| `bsp_button.c/.h` | Leitura do botão S2 em P1.3 e debounce |
 
 ### Configuração de rede
 
@@ -278,14 +284,17 @@ Depois de gravar, reinicie a placa para executar o firmware. Conecte o W5500 à 
 
 Substitua pelo IP e pela porta configurados em `app_config.h`. O computador e o servidor devem ter conectividade na rede local.
 
-### Teste da alavanca e do LED
+### Teste da alavanca, do botão e do LED
 
 1. Entre no servidor com o **Minecraft Java 1.12.2** e aguarde a plataforma aparecer.
 2. Localize a alavanca e a lâmpada à frente do ponto de nascimento.
 3. Com a mão vazia, clique com o **botão direito** na alavanca.
 4. Observe a **lâmpada do jogo e o LED vermelho da placa acendendo juntos**, a mensagem no chat e o som de clique.
 5. Clique novamente para desligar ambos.
-6. Saia e reconecte: o cenário começa desligado novamente.
+6. Pressione e solte o **botão S2 da placa**: a alavanca, a lâmpada e o LED devem alternar, com mensagem no chat e som.
+7. Segure S2 por alguns segundos: deve ocorrer apenas um acionamento. Solte e pressione novamente para alternar outra vez.
+8. Alterne entre S2 e a alavanca no jogo para verificar que ambos controlam o mesmo estado.
+9. Saia e reconecte: o cenário começa desligado novamente.
 
 Para ouvir o clique, mantenha os volumes **Geral** e **Blocos** habilitados nas opções de áudio. Para acompanhar as mensagens, deixe o chat visível.
 
