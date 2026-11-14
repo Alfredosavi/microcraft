@@ -5,6 +5,7 @@
 
 #include "bsp_delay.h"
 #include "bsp_led.h"
+#include "bsp_button.h"
 #include "w5500.h"
 
 static const w5500_network_t network = {
@@ -47,6 +48,7 @@ int16_t app_main_init(void)
     mc_server_reset();
     closing_ms = 0;
     led_init();
+    button_init();
 
     return w5500_init(&network);
 }
@@ -69,6 +71,7 @@ static int16_t app_error(int16_t error)
 
 int16_t app_main_poll(void)
 {
+    bool pressed = button_poll();
     int16_t rc = w5500_socket_status();
     if (rc < 0) return app_error(rc);
 
@@ -89,6 +92,11 @@ int16_t app_main_poll(void)
         }
 
         return W5500_OK;
+    }
+
+    if (rc == W5500_SOCK_ESTABLISHED && pressed) {
+        rc = mc_server_toggle_devices();
+        if (rc < 0) return app_error(rc);
     }
 
     rc = mc_server_poll();

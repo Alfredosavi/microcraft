@@ -117,6 +117,22 @@ static int16_t start_packet(uint32_t id)
 }
 
 
+int16_t mc_server_toggle_devices(void)
+{
+    int16_t rc;
+    if (session.state != PLAY || session.teleport_pending) return W5500_OK;
+
+    rc = mc_send_devices(!session.devices_powered);
+    if (rc < 0) return rc;
+
+    session.devices_powered = !session.devices_powered;
+    if (session.devices_powered) led_on();
+    else led_off();
+    
+    return mc_send_device_feedback(session.devices_powered);
+}
+
+
 static int16_t finish_packet(void)
 {
     int16_t rc = W5500_OK;
@@ -161,14 +177,7 @@ static int16_t finish_packet(void)
             // Main hand only: a click can also produce an off-hand packet.
             if (!session.teleport_pending && session.payload[8] == 0 &&
                 memcmp(session.payload, mc_lever_position, 8) == 0) {
-                rc = mc_send_devices(!session.devices_powered);
-
-                if (rc == W5500_OK) {
-                    session.devices_powered = !session.devices_powered;
-                    if (session.devices_powered) led_on();
-                    else led_off();
-                    rc = mc_send_device_feedback(session.devices_powered);
-                }
+                rc = mc_server_toggle_devices();
             }
         break;
 
